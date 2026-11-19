@@ -23,6 +23,10 @@ Out of the box it shows **USDBRL** and **EURBRL**.
 - **Left-click** opens a details panel with the full name, absolute and
   percent change, day range and previous close.
 - **Middle-click** refreshes immediately.
+- **Optional price alerts**: set a high and/or low limit per asset. When a
+  price crosses one, you get a local notification with the price, time and
+  day's change, and a short, soft chime. Once per crossing, never repeated
+  while the price stays beyond the limit.
 - Follows the Omarchy theme and language live: English and Portuguese
   strings, and the decimal separator of the selected language.
 - One small HTTPS request per refresh for all assets, no API key needed.
@@ -49,7 +53,9 @@ omarchy plugin enable io.github.giuliano-sn.quote-b3 --section right
 
 ### Dependencies
 
-Only `curl`, which every Omarchy install already has. No services,
+Only `curl`, plus `pw-play` (PipeWire) or `paplay` for the alert chime and
+`omarchy-notification-send` for notifications, all already present on every
+Omarchy install. No services,
 installers, background daemons or elevated privileges.
 
 ## Usage
@@ -70,6 +76,31 @@ installers, background daemons or elevated privileges.
 4. **Remove** drops an asset; **Restore defaults** goes back to USDBRL and EURBRL.
 5. Click **Save**.
 
+### Price alerts
+
+1. Right-click the widget and turn on **Notify me when a price crosses a limit**.
+2. Each chosen asset gets two fields: **Above** and **Below**. Fill either,
+   both or neither. Both `5,95` and `5.95` work; an invalid value turns red
+   and is ignored.
+3. Optionally turn off **Play a chime with the notification**.
+4. Click **Save**.
+
+How it fires:
+
+- Prices are checked on every refresh (every `intervalMinutes`, default 5),
+  so a crossing is noticed at the next refresh after it happens.
+- When a price moves from inside a limit to beyond it, you get **one**
+  notification such as *"PETR4 rose above 45.00 — Now 45.12 at 14:32 ·
+  +0.95 (+2.15%) today"* and the chime plays once.
+- The alert stays quiet while the price remains beyond the limit, and re-arms
+  only after the price is back inside it by at least 0.25%, so a price
+  bouncing on the line does not spam you.
+- A limit that is already crossed when you save it, or when the shell starts,
+  does not notify; only a new crossing does. Crossings that happen while the
+  shell is not running or background refresh is off are not reported.
+
+Try it with `omarchy-shell io.github.giuliano-sn.quote-b3 testAlert`.
+
 ### IPC
 
 ```sh
@@ -78,6 +109,7 @@ omarchy-shell io.github.giuliano-sn.quote-b3 open      # details panel
 omarchy-shell io.github.giuliano-sn.quote-b3 settings  # settings form
 omarchy-shell io.github.giuliano-sn.quote-b3 close
 omarchy-shell io.github.giuliano-sn.quote-b3 toggle
+omarchy-shell io.github.giuliano-sn.quote-b3 testAlert # sample alert + chime
 ```
 
 ## Configuration
@@ -92,7 +124,13 @@ the widget's entry under `bar.layout.<section>` in
   "symbols": ["USDBRL", "EURBRL", "PETR4"],
   "intervalMinutes": 5,
   "autoRefresh": true,
-  "colorizeTrend": true
+  "colorizeTrend": true,
+  "alertsEnabled": true,
+  "alertSound": true,
+  "alerts": {
+    "PETR4": { "above": 45, "below": 40 },
+    "USDBRL": { "above": 6.0, "below": null }
+  }
 }
 ```
 
@@ -102,6 +140,9 @@ the widget's entry under `bar.layout.<section>` in
 | `intervalMinutes` | integer (1–120)  | `5`                    | Minutes between automatic refreshes.                                        |
 | `autoRefresh`     | boolean          | `true`                 | Refresh in the background. When off, prices are fetched only at startup, after saving settings, and on middle-click / Refresh. |
 | `colorizeTrend`   | boolean          | `true`                 | Color arrows with the theme's ANSI green (`color2`) and red (`color1`).      |
+| `alertsEnabled`   | boolean          | `false`                | Turn price alerts on.                                                       |
+| `alertSound`      | boolean          | `true`                 | Play the bundled chime with each alert notification.                        |
+| `alerts`          | object           | `{}`                   | Per-asset limits: `{ "SYMBOL": { "above": number\|null, "below": number\|null } }`. Limits for assets not in `symbols` are ignored. |
 
 Invalid or duplicate symbols are ignored, and only the first three are used.
 
@@ -121,6 +162,8 @@ Invalid or duplicate symbols are ignored, and only the first three are used.
   markup and length-limited, and every text element renders as plain text.
 - Nothing is sent besides the tickers/search text, and nothing is stored
   outside your `shell.json` entry.
+- Price alerts are evaluated locally; notifications and the chime never leave
+  your machine.
 - B3 prices from Yahoo may be **delayed by up to 15 minutes**. This widget is
   for at-a-glance information only, not for trading decisions.
 
@@ -147,6 +190,7 @@ Files:
 - `manifest.json`: plugin manifest
 - `BarWidget.qml`: bar face, details panel and settings form
 - `Model.js`: symbol rules, Yahoo Finance URLs and response parsing (pure JS)
+- `sounds/chime.oga`: alert chime, synthesized for this project (MIT)
 - `i18n/`: translations (`en.json`, `pt.json`; `pt-BR` falls back to `pt`)
 - `tests/test_model.js`: node tests for `Model.js`
 

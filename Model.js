@@ -233,6 +233,89 @@ function trendColors(toml) {
   return { up: green ? green[1] : "", down: red ? red[1] : "" }
 }
 
+// --- price alerts -----------------------------------------------------------
+
+// Once an alert fires it re-arms only after the price comes back inside the
+// limit by this fraction, so a price hovering on the line does not notify on
+// every refresh.
+var REARM_MARGIN = 0.0025
+var MAX_PRICE = 1e9
+
+// "5,95", "5.95", "1.234,56", "1,234.56" -> number, or NaN when empty/invalid.
+function parsePrice(text) {
+  var s = String(text === undefined || text === null ? "" : text).replace(/[\s ]/g, "")
+  if (s === "" || s.length > 20 || !/^[0-9.,]+$/.test(s)) return NaN
+  var lastDot = s.lastIndexOf("."), lastComma = s.lastIndexOf(",")
+  var decimalAt = Math.max(lastDot, lastComma)
+  if (lastDot !== -1 && lastComma !== -1) {
+    s = s.slice(0, decimalAt).replace(/[.,]/g, "") + "." + s.slice(decimalAt + 1)
+  } else if (lastComma !== -1) {
+    // A lone comma is a decimal separator unless it groups thousands ("1,234").
+    s = (s.split(",").length === 2 && !/^\d{1,3},\d{3}$/.test(s)) ? s.replace(",", ".") : s.replace(/,/g, "")
+  } else if (s.split(".").length > 2) {
+    s = s.replace(/\./g, "")
+  }
+  var n = Number(s)
+  return (isFinite(n) && n > 0 && n < MAX_PRICE) ? n : NaN
+}
+
+function limitValue(v) {
+  var n = typeof v === "number" ? v : parsePrice(v)
+  return (isFinite(n) && n > 0 && n < MAX_PRICE) ? n : null
+}
+
+// Settings value -> { SYMBOL: { above: number|null, below: number|null } }
+// for tracked symbols that have at least one limit.
+function normalizeAlerts(value, symbols) {
+  var out = {}
+  if (!value || typeof value !== "object") return out
+  for (var i = 0; i < symbols.length; i++) {
+    var s = symbols[i]
+    var a = value[s]
+    if (!a || typeof a !== "object") continue
+    var above = limitValue(a.above), below = limitValue(a.below)
+    if (above === null && below === null) continue
+    out[s] = { above: above, below: below }
+  }
+  return out
+}
+
+function alertKey(symbol, side, limit) {
+  return symbol + "|" + side + "|" + limit
+}
+
+// Compares fresh quotes with the limits. `state` maps alertKey -> "inside" |
+// "beyond" from the previous check. A limit only fires on the move from
+// inside to beyond; the first sighting of a limit just records where the
+// price is, so restarting the shell or saving settings never re-notifies.
+function evaluateAlerts(alerts, quotes, state) {
+  var prev = state || {}
+  var next = {}
+  var events = []
+  for (var symbol in alerts) {
+    var q = quotes[symbol]
+    var a = alerts[symbol]
+    var sides = [["above", a.above], ["below", a.below]]
+    for (var j = 0; j < sides.length; j++) {
+      var side = sides[j][0], limit = sides[j][1]
+      if (limit === null) continue
+      var key = alertKey(symbol, side, limit)
+      if (!q) { if (prev[key]) next[key] = prev[key]; continue }
+      var beyond = side === "above" ? q.price > limit : q.price < limit
+      var back = side === "above" ? q.price <= limit * (1 - REARM_MARGIN) : q.price >= limit * (1 + REARM_MARGIN)
+      var was = prev[key]
+      var now
+      if (was === undefined) now = beyond ? "beyond" : "inside"
+      else if (was === "inside") now = beyond ? "beyond" : "inside"
+      else now = back ? "inside" : "beyond"
+      if (was === "inside" && now === "beyond")
+        events.push({ symbol: symbol, side: side, limit: limit, price: q.price, quote: q })
+      next[key] = now
+    }
+  }
+  return { state: next, events: events }
+}
+
 function clampInt(v, lo, hi, fallback) {
   var n = parseInt(v, 10)
   if (!isFinite(n)) return fallback
@@ -245,6 +328,7 @@ if (typeof module !== "undefined") {
     normalizeSymbol: normalizeSymbol, yahooSymbol: yahooSymbol, symbolList: symbolList,
     quotesUrl: quotesUrl, searchUrl: searchUrl, curlArgs: curlArgs, cleanName: cleanName,
     parseQuotes: parseQuotes, parseSearch: parseSearch, trendOf: trendOf, arrow: arrow,
-    trendColors: trendColors, clampInt: clampInt, decimalsFor: decimalsFor
+    trendColors: trendColors, clampInt: clampInt, decimalsFor: decimalsFor,
+    parsePrice: parsePrice, normalizeAlerts: normalizeAlerts, evaluateAlerts: evaluateAlerts
   }
 }

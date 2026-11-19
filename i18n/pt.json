@@ -26,5 +26,15 @@
   "previousClose": "Fechamento anterior: %1",
   "refresh": "Atualizar",
   "settings": "Configurações",
-  "tooltip": "Clique: detalhes · Botão direito: configurações · Meio: atualizar"
+  "tooltip": "Clique: detalhes · Botão direito: configurações · Meio: atualizar",
+  "section.alerts": "ALERTAS DE PREÇO",
+  "alertsEnabled": "Avisar quando um preço ultrapassar um limite",
+  "alertAbove": "Acima de",
+  "alertBelow": "Abaixo de",
+  "alertSound": "Tocar um som com a notificação",
+  "alertsHint": "Deixe o campo vazio para não ter limite. Você recebe uma notificação quando o preço ultrapassa um limite; o alerta volta a valer quando o preço retorna claramente para dentro dele.",
+  "notify.above": "%1 subiu acima de %2",
+  "notify.below": "%1 caiu abaixo de %2",
+  "notify.body": "Agora %1 às %2 · %3 hoje",
+  "details.alerts": "Alertas: %1"
 }

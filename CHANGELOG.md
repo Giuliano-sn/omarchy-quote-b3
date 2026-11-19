@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 — 2026-11-19
+
+- **Price alerts (optional, off by default)**: set an *above* and/or *below*
+  limit per asset in the right-click settings. When a price crosses a limit
+  you get one local notification with the asset, the price, the quote time
+  and the day's change, plus a short, soft chime (can be turned off).
+- Each limit fires once per crossing and re-arms only after the price is
+  clearly back inside it (0.25% margin), so a price hovering on the line
+  does not notify on every refresh. Restarting the shell or saving settings
+  never re-notifies for a limit that is already crossed.
+- Limits accept `5,95`, `5.95`, `1.234,56` or `1,234.56`; invalid entries are
+  highlighted and ignored.
+- Details panel lists each asset's active limits.
+- New IPC call `testAlert` sends a sample notification and chime.
+- Bundled chime (`sounds/chime.oga`), played with `pw-play`, falling back to
+  `paplay`.
+
 ## 1.0.0 — 2026-11-19
 
 - First release.

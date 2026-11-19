@@ -26,5 +26,15 @@
   "previousClose": "Previous close: %1",
   "refresh": "Refresh",
   "settings": "Settings",
-  "tooltip": "Click: details · Right-click: settings · Middle-click: refresh"
+  "tooltip": "Click: details · Right-click: settings · Middle-click: refresh",
+  "section.alerts": "PRICE ALERTS",
+  "alertsEnabled": "Notify me when a price crosses a limit",
+  "alertAbove": "Above",
+  "alertBelow": "Below",
+  "alertSound": "Play a chime with the notification",
+  "alertsHint": "Leave a field empty for no limit. You get one notification when the price crosses a limit; it re-arms once the price is clearly back inside it.",
+  "notify.above": "%1 rose above %2",
+  "notify.below": "%1 fell below %2",
+  "notify.body": "Now %1 at %2 · %3 today",
+  "details.alerts": "Alerts: %1"
 }

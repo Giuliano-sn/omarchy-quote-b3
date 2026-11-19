@@ -12,7 +12,8 @@ import "Model.js" as Model
 // assets are picked by typing their name), middle-click refreshes now.
 // Network: one HTTPS request to Yahoo Finance per refresh (default every
 // 5 minutes, can be turned off in settings), plus search requests while typing
-// in the settings form.
+// in the settings form. Optional price alerts send a local notification and
+// play a short chime once each time a price crosses a user-set limit.
 BarWidget {
   id: root
   moduleName: "io.github.giuliano-sn.quote-b3"
@@ -25,12 +26,18 @@ BarWidget {
   readonly property int intervalMinutes: Model.clampInt(setting("intervalMinutes", 5), 1, 120, 5)
   readonly property bool autoRefresh: setting("autoRefresh", true) === true
   readonly property bool colorizeTrend: setting("colorizeTrend", true) === true
+  readonly property bool alertsEnabled: setting("alertsEnabled", false) === true
+  readonly property bool alertSound: setting("alertSound", true) === true
+  readonly property var alerts: Model.normalizeAlerts(setting("alerts", null), symbols)
+  readonly property string chimePath: decodeURIComponent(Qt.resolvedUrl("sounds/chime.oga").toString().replace(/^file:\/\//, ""))
 
   // --- state -----------------------------------------------------------------
   property var quotes: ({})
   property double lastUpdated: 0
   property bool lastFailed: false
   property bool pendingRefresh: false
+  // alertKey -> "inside" | "beyond" from the last check (see Model.evaluateAlerts).
+  property var alertState: ({})
 
   property var themeColors: ({ up: "", down: "" })
   readonly property color barForeground: bar ? bar.barForeground : Color.foreground
@@ -47,6 +54,11 @@ BarWidget {
   property int draftInterval: 5
   property bool draftAutoRefresh: true
   property bool draftColorize: true
+  property bool draftAlertsEnabled: false
+  property bool draftAlertSound: true
+  // { SYMBOL: { above: "text", below: "text" } }, mutated in place while typing
+  // so the fields keep their cursor.
+  property var draftAlerts: ({})
 
   // Search state for the settings form.
   property string searchText: ""
@@ -105,6 +117,7 @@ BarWidget {
         root.quotes = parsed
         root.lastUpdated = Date.now()
         root.lastFailed = false
+        root.checkAlerts()
       } else {
         root.lastFailed = true
       }
@@ -120,6 +133,73 @@ BarWidget {
     running: root.autoRefresh && root.symbols.length > 0
     repeat: true
     onTriggered: root.refresh()
+  }
+
+  // --- price alerts ----------------------------------------------------------
+  function checkAlerts() {
+    if (!root.alertsEnabled) { root.alertState = ({}); return }
+    var r = Model.evaluateAlerts(root.alerts, root.quotes, root.alertState)
+    root.alertState = r.state
+    for (var i = 0; i < r.events.length; i++) root.notifyAlert(r.events[i])
+  }
+
+  function notifyAlert(ev) {
+    var q = ev.quote
+    var decimals = q && q.decimals !== undefined ? q.decimals : Model.decimalsFor(ev.symbol)
+    var limitText = Commons.I18n.formatNumber(ev.limit, decimals)
+    var title = strings.t(ev.side === "above" ? "notify.above" : "notify.below").arg(ev.symbol).arg(limitText)
+    var body = strings.t("notify.body")
+      .arg(Commons.I18n.formatNumber(ev.price, decimals))
+      .arg(root.timeText(q && q.marketTime > 0 ? q.marketTime : Date.now()))
+      .arg(q ? root.changeText(q) : "—")
+    Quickshell.execDetached(["omarchy-notification-send", "--app-name", "Quote B3", "-g", "\uf201",
+                             "-u", "normal", title, body])
+    if (root.alertSound) root.playChime()
+  }
+
+  function playChime() {
+    if (soundProc.running) return
+    soundProc.command = ["pw-play", "--volume", "0.7", root.chimePath]
+    soundProc.running = true
+  }
+
+  // pw-play is PipeWire's player; fall back to PulseAudio's paplay.
+  Process {
+    id: soundProc
+    onExited: function (exitCode) {
+      if (exitCode !== 0) Quickshell.execDetached(["paplay", root.chimePath])
+    }
+  }
+
+  function testAlert() {
+    var symbol = root.symbols.length > 0 ? root.symbols[0] : "USDBRL"
+    var q = root.quotes[symbol] || null
+    var price = q ? q.price : 1
+    root.notifyAlert({ symbol: symbol, side: "above", limit: price, price: price, quote: q })
+  }
+
+  function draftAlertText(symbol, side) {
+    var a = root.draftAlerts[symbol]
+    return a && a[side] !== undefined && a[side] !== null ? String(a[side]) : ""
+  }
+
+  function setDraftAlert(symbol, side, text) {
+    if (!root.draftAlerts[symbol]) root.draftAlerts[symbol] = { above: "", below: "" }
+    root.draftAlerts[symbol][side] = text
+  }
+
+  function alertInvalid(text) {
+    return String(text || "").replace(/\s/g, "") !== "" && isNaN(Model.parsePrice(text))
+  }
+
+  function alertSummary(symbol) {
+    var a = root.alerts[symbol]
+    if (!root.alertsEnabled || !a) return ""
+    var d = Model.decimalsFor(symbol)
+    var parts = []
+    if (a.above !== null) parts.push("▲ " + Commons.I18n.formatNumber(a.above, d))
+    if (a.below !== null) parts.push("▼ " + Commons.I18n.formatNumber(a.below, d))
+    return strings.t("details.alerts").arg(parts.join("  ·  "))
   }
 
   // --- theme colors (ANSI green/red from colors.toml) -----------------------
@@ -218,6 +298,17 @@ BarWidget {
     root.draftInterval = root.intervalMinutes
     root.draftAutoRefresh = root.autoRefresh
     root.draftColorize = root.colorizeTrend
+    root.draftAlertsEnabled = root.alertsEnabled
+    root.draftAlertSound = root.alertSound
+    var drafts = {}
+    for (var s in root.alerts) {
+      var d = Model.decimalsFor(s)
+      drafts[s] = {
+        above: root.alerts[s].above !== null ? Commons.I18n.formatNumber(root.alerts[s].above, d) : "",
+        below: root.alerts[s].below !== null ? Commons.I18n.formatNumber(root.alerts[s].below, d) : ""
+      }
+    }
+    root.draftAlerts = drafts
     root.resetSearch()
     root.panelMode = "settings"
   }
@@ -229,10 +320,17 @@ BarWidget {
     entry.intervalMinutes = Model.clampInt(root.draftInterval, 1, 120, 5)
     entry.autoRefresh = root.draftAutoRefresh
     entry.colorizeTrend = root.draftColorize
+    entry.alertsEnabled = root.draftAlertsEnabled
+    entry.alertSound = root.draftAlertSound
+    var saved = Model.normalizeAlerts(root.draftAlerts, entry.symbols)
+    entry.alerts = saved
     root.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
     root.closePanel()
+    // Record where prices sit against the new limits right away, so only a
+    // later crossing notifies.
+    Qt.callLater(root.checkAlerts)
     root.refresh()
   }
 
@@ -252,6 +350,7 @@ BarWidget {
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
     function settings(): void { root.openSettings() }
+    function testAlert(): void { root.testAlert() }
   }
 
   // --- bar -------------------------------------------------------------------
@@ -478,6 +577,12 @@ BarWidget {
                     : "")
                 : ""
             }
+
+            Caption {
+              width: parent.width
+              visible: text !== ""
+              text: root.alertSummary(detailItem.modelData)
+            }
           }
         }
 
@@ -694,6 +799,77 @@ BarWidget {
             bordered: true
             foreground: root.barForeground
             onClicked: { root.draftSymbols = Model.DEFAULT_SYMBOLS.slice(); root.resetSearch() }
+          }
+
+          PanelSectionHeader { text: strings.t("section.alerts"); foreground: root.barForeground }
+
+          Toggle {
+            width: parent.width
+            label: strings.t("alertsEnabled")
+            checked: root.draftAlertsEnabled
+            foreground: root.barForeground
+            onClicked: root.draftAlertsEnabled = !root.draftAlertsEnabled
+          }
+
+          Repeater {
+            model: root.draftAlertsEnabled ? root.draftSymbols : []
+
+            Item {
+              id: alertRow
+              required property string modelData
+              width: settingsColumn.width
+              implicitHeight: aboveField.implicitHeight
+
+              PanelText {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(70)
+                elide: Text.ElideRight
+                text: alertRow.modelData
+                font.bold: true
+              }
+
+              Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(8)
+
+                TextField {
+                  id: aboveField
+                  width: Style.space(130)
+                  placeholderText: strings.t("alertAbove")
+                  foreground: root.alertInvalid(text) ? root.downColor : root.barForeground
+                  maximumLength: 20
+                  inputMethodHints: Qt.ImhFormattedNumbersOnly
+                  text: root.draftAlertText(alertRow.modelData, "above")
+                  onTextChanged: root.setDraftAlert(alertRow.modelData, "above", text)
+                }
+                TextField {
+                  width: Style.space(130)
+                  placeholderText: strings.t("alertBelow")
+                  foreground: root.alertInvalid(text) ? root.downColor : root.barForeground
+                  maximumLength: 20
+                  inputMethodHints: Qt.ImhFormattedNumbersOnly
+                  text: root.draftAlertText(alertRow.modelData, "below")
+                  onTextChanged: root.setDraftAlert(alertRow.modelData, "below", text)
+                }
+              }
+            }
+          }
+
+          Toggle {
+            width: parent.width
+            visible: root.draftAlertsEnabled
+            label: strings.t("alertSound")
+            checked: root.draftAlertSound
+            foreground: root.barForeground
+            onClicked: root.draftAlertSound = !root.draftAlertSound
+          }
+
+          Caption {
+            width: parent.width
+            visible: root.draftAlertsEnabled
+            text: strings.t("alertsHint")
           }
 
           PanelSectionHeader { text: strings.t("section.refresh"); foreground: root.barForeground }

@@ -110,4 +110,53 @@ t("trendColors / arrow / clamp", () => {
   assert.strictEqual(M.clampInt("x", 1, 60, 5), 5);
 });
 
+t("parsePrice", () => {
+  assert.strictEqual(M.parsePrice("5,95"), 5.95);
+  assert.strictEqual(M.parsePrice("5.95"), 5.95);
+  assert.strictEqual(M.parsePrice(" 1.234,56 "), 1234.56);
+  assert.strictEqual(M.parsePrice("1,234.56"), 1234.56);
+  assert.strictEqual(M.parsePrice("1,234"), 1234);
+  assert.strictEqual(M.parsePrice("170.000"), 170);
+  assert.strictEqual(M.parsePrice("170.000.000"), 170000000);
+  assert.ok(isNaN(M.parsePrice("")));
+  assert.ok(isNaN(M.parsePrice("abc")));
+  assert.ok(isNaN(M.parsePrice("0")));
+  assert.ok(isNaN(M.parsePrice("-5")));
+});
+
+t("normalizeAlerts", () => {
+  const a = M.normalizeAlerts({ PETR4: { above: "45,5", below: "" }, VALE3: { above: null, below: null }, XXXX: { above: 1 }, USDBRL: { below: 5.5 } }, ["PETR4", "VALE3", "USDBRL"]);
+  assert.deepStrictEqual(Object.keys(a), ["PETR4", "USDBRL"]);
+  assert.strictEqual(a.PETR4.above, 45.5);
+  assert.strictEqual(a.PETR4.below, null);
+  assert.strictEqual(a.USDBRL.below, 5.5);
+  assert.strictEqual(Object.keys(M.normalizeAlerts(null, ["PETR4"])).length, 0);
+});
+
+t("evaluateAlerts crossing, once, re-arm", () => {
+  const alerts = { PETR4: { above: 45, below: 40 } };
+  const q = (p) => ({ PETR4: { price: p } });
+  let r = M.evaluateAlerts(alerts, q(46), {});            // first sighting beyond: no event
+  assert.strictEqual(r.events.length, 0);
+  r = M.evaluateAlerts(alerts, q(44), r.state);           // back inside (beyond margin)
+  assert.strictEqual(r.events.length, 0);
+  r = M.evaluateAlerts(alerts, q(45.2), r.state);         // crosses up: fires
+  assert.strictEqual(r.events.length, 1);
+  assert.strictEqual(r.events[0].side, "above");
+  r = M.evaluateAlerts(alerts, q(45.5), r.state);         // still above: silent
+  assert.strictEqual(r.events.length, 0);
+  r = M.evaluateAlerts(alerts, q(44.99), r.state);        // dips inside the margin: still armed off
+  r = M.evaluateAlerts(alerts, q(45.1), r.state);
+  assert.strictEqual(r.events.length, 0);
+  r = M.evaluateAlerts(alerts, q(44.5), r.state);         // clearly back: re-arms
+  r = M.evaluateAlerts(alerts, q(45.3), r.state);
+  assert.strictEqual(r.events.length, 1);
+  r = M.evaluateAlerts(alerts, q(39.9), r.state);         // falls below: fires below
+  assert.deepStrictEqual(Array.from(r.events, (e) => e.side), ["below"]);
+  const kept = M.evaluateAlerts(alerts, {}, r.state);     // missing quote keeps state
+  assert.strictEqual(Object.keys(kept.state).length, 2);
+  const changed = M.evaluateAlerts({ PETR4: { above: 39, below: null } }, q(39.9), r.state); // new limit: first sighting
+  assert.strictEqual(changed.events.length, 0);
+});
+
 console.log(`ok - ${n} test groups passed`);

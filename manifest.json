@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.giuliano-sn.quote-b3",
+  "name": "Quote B3",
+  "version": "1.0.0",
+  "author": "Giuliano-sn",
+  "license": "MIT",
+  "homepage": "https://github.com/Giuliano-sn/omarchy-quote-b3",
+  "description": "Live prices for up to 3 Brazilian B3 stocks, BRL currency pairs or the Ibovespa in the bar, each with a trend arrow. Defaults to USDBRL and EURBRL.",
+  "keepLoaded": false,
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Quote B3",
+    "description": "Shows up to 3 assets (B3 stocks, BRL currency pairs or IBOV) as NAME ▲ price. Left-click for details, right-click to pick assets by typing their name, middle-click to refresh.",
+    "category": "Finance",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "symbols": ["USDBRL", "EURBRL"],
+      "intervalMinutes": 5,
+      "autoRefresh": true,
+      "colorizeTrend": true
+    }
+  }
+}

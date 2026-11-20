@@ -40,7 +40,7 @@ BarWidget {
   property var alertState: ({})
 
   property var themeColors: ({ up: "", down: "" })
-  readonly property color barForeground: bar ? bar.barForeground : Color.foreground
+  readonly property color barForeground: bar ? bar.barForeground : Commons.Color.foreground
   readonly property color upColor: themeColors.up !== "" ? themeColors.up : barForeground
   readonly property color downColor: themeColors.down !== "" ? themeColors.down : barForeground
 
@@ -205,7 +205,7 @@ BarWidget {
   // --- theme colors (ANSI green/red from colors.toml) -----------------------
   FileView {
     id: colorsFile
-    path: Color.currentThemePath + "/colors.toml"
+    path: Commons.Color.currentThemePath + "/colors.toml"
     printErrors: false
     onLoaded: root.themeColors = Model.trendColors(text())
     onLoadFailed: root.themeColors = ({ up: "", down: "" })
@@ -213,7 +213,7 @@ BarWidget {
 
   // Theme switches push new colors to Color; re-read ours alongside.
   Connections {
-    target: Color
+    target: Commons.Color
     function onForegroundChanged() { colorsFile.reload() }
     function onAccentChanged() { colorsFile.reload() }
   }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 — 2026-11-20
+
+- Fix trend arrows not being colored: the theme's `colors.toml` was never
+  read because the widget referenced `Color` instead of the shell's
+  `Commons.Color` singleton, so the arrows fell back to the bar foreground.
+  Theme switches now also re-read the green/red colors as intended.
+
 ## 1.1.0 — 2026-11-19
 
 - **Price alerts (optional, off by default)**: set an *above* and/or *below*

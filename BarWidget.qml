@@ -374,7 +374,7 @@ BarWidget {
       id: contentRow
       visible: !root.vertical
       anchors.centerIn: parent
-      spacing: Style.space(12)
+      spacing: Style.space(4)
       opacity: root.lastFailed ? 0.6 : 1
 
       Text {
@@ -393,18 +393,31 @@ BarWidget {
         Row {
           id: quoteItem
           required property string modelData
+          required property int index
           readonly property var quote: root.quotes[modelData] || null
           anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(4)
 
-          BarText { text: quoteItem.modelData }
+          // "·" between quotes (not before the first one).
           BarText {
-            visible: quoteItem.quote !== null
-            text: quoteItem.quote ? Model.arrow(quoteItem.quote.trend) : ""
-            color: quoteItem.quote ? root.trendColor(quoteItem.quote.trend) : button.foreground
-            font.pixelSize: button.fontSize * 0.8
+            visible: quoteItem.index > 0
+            text: "·"
+            opacity: 0.6
           }
-          BarText { text: root.priceText(quoteItem.quote) }
+
+          Row {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            BarText { text: quoteItem.modelData }
+            BarText {
+              visible: quoteItem.quote !== null
+              text: quoteItem.quote ? Model.arrow(quoteItem.quote.trend) : ""
+              color: quoteItem.quote ? root.trendColor(quoteItem.quote.trend) : button.foreground
+              font.pixelSize: button.fontSize * 0.8
+            }
+            BarText { text: root.priceText(quoteItem.quote) }
+          }
         }
       }
     }

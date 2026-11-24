@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — 2026-11-24
+
+- Assets in the bar are now separated by a dimmed `·`
+  (`USDBRL ▲ 5,34 · EURBRL ▼ 6,12`).
+
 ## 1.1.1 — 2026-11-20
 
 - Fix trend arrows not being colored: the theme's `colors.toml` was never
